@@ -1,8 +1,8 @@
 # 🧹 Junk Cleaner / 垃圾文件清理工具 - cleaner.py
 
 <div align="center">
-  <img width="1000" alt="Screenshot_GUI" src="screenshots/cleaner_gui.png" />
-  <img width="1000" alt="Screenshot_CLI" src="screenshots/cleaner_cli.png" />
+  <img alt="Screenshot_GUI" src="screenshots/cleaner_gui.png" />
+  <img alt="Screenshot_CLI" src="screenshots/cleaner_cli.png" />
 </div>
 
 <p align="center">
@@ -140,8 +140,8 @@ Currently, only the [macOS arm64 version](https://github.com/roperescuer/junk-cl
 ## imac-accent-colors / iMac 主题色设置工具 - imac_color.py
 
 <div align="center">
-  <img width="500" src="screenshots/imac-color_gui.png" />
-  <img width="1000" src="screenshots/imac-color_cli.png" />
+  <img src="screenshots/imac-color_gui.png" />
+  <img src="screenshots/imac-color_cli.png" />
 </div>
 
 Enable iMac M1 accent colors / 启用 iMac 主题颜色
@@ -152,7 +152,7 @@ Method from / 方法来自 https://georgegarside.com/blog/macos/imac-m1-accent-c
 ## Doge - doge.py
 
 <div align="center">
-  <img width="800" src="screenshots/doge.png" />
+  <img src="screenshots/doge.png" />
 </div>
 
 Forked from [Olivia5k/doge](https://github.com/Olivia5k/doge) / 从 [Olivia5k/doge](https://github.com/Olivia5k/doge) fork

@@ -151,8 +151,8 @@ class GUI:
 
         # 创建主窗口
         self.root = tk.Tk()
-        self.root.geometry("1200x700")
-        self.root.minsize(900, 600)
+        self.root.geometry("1152x720")
+        self.root.minsize(1024, 640)
         self.root.title(APP_TITLE)
 
         # 路径标签
@@ -189,9 +189,9 @@ class GUI:
         self.tree.heading("modified", text="🕒 Modified", command=lambda: self.treeview_sort("modified", False))
 
         self.tree.column("select", width=10, anchor="center")
-        self.tree.column("path", width=500)
-        self.tree.column("kind", width=100, anchor="center")
-        self.tree.column("size", width=100, anchor="center")
+        self.tree.column("path", width=650, anchor="w")
+        self.tree.column("kind", width=40, anchor="center")
+        self.tree.column("size", width=40, anchor="center")
         self.tree.column("modified", width=100, anchor="center")
 
         ttk.Style().configure("Treeview", rowheight=25)
