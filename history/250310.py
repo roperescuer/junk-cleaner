@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Requires Python 3.12+
 
 import os, sys, time, platform, subprocess, shutil, threading, queue, re, argparse
 from pathlib import Path
@@ -12,7 +11,7 @@ from rich.table import Table
 from rich.prompt import Confirm
 
 OS = platform.system()
-APP_TITLE = f"🧹 Junk Cleaner V250311 on {OS}"
+APP_TITLE = f"🧹 Junk Cleaner V250310 on {OS}"
 RUNTIME_VERSION = f"Python {sys.version.split()[0]} / tkinter {tk.TkVersion}"
 DEFAULT_SCAN_PATH = {"Darwin": Path("/Users"), "Windows": Path("C:/")}.get(OS, Path("/home"))
 JUNK_FILES = {
@@ -258,7 +257,8 @@ class GUI:
             self.progress.config(mode="indeterminate")
             self.progress.start(10)
             self.status_var.set("Scanning...")
-            self.tree.delete(*self.tree.get_children())
+            for item in self.tree.get_children():
+                self.tree.delete(item)
 
             # 开始扫描并检查队列
             self.core.action("scan", self.scan_path)
@@ -275,25 +275,32 @@ class GUI:
     def clean_files(self) -> None:
         """清理选中的文件"""
 
-        # 获取所有选中的项目
-        selected_items = [item for item in self.tree.get_children()
-                            if self.tree.item(item)["values"][0] == "✓"]
+        try:
+            # 获取所有选中的项目
+            selected_items = [item for item in self.tree.get_children()
+                             if self.tree.item(item)["values"][0] == "✓"]
 
-        # 如果没有选中项目或用户取消操作, 则返回
-        if not selected_items or not messagebox.askyesno("Confirm",
-            "Do you want to delete these files?"):
-            return
+            # 如果没有选中项目或用户取消操作, 则返回
+            if not selected_items or not messagebox.askyesno("Confirm",
+                "Do you want to delete these files?"):
+                return
 
-        # 禁用清理按钮, 配置进度条动画
-        self.clean_btn.config(state="disabled")
-        self.progress.config(mode="determinate", maximum=100, value=0)
+            # 禁用清理按钮, 配置进度条动画
+            self.clean_btn.config(state="disabled")
+            self.progress.config(mode="determinate", maximum=100, value=0)
 
-        # 将 Treeview 中的字符串路径转换为 Path 对象
-        items_to_clean = [Path(self.tree.item(item)["values"][1]) for item in selected_items]
+            # 将 Treeview 中的字符串路径转换为 Path 对象
+            items_to_clean = [Path(self.tree.item(item)["values"][1]) for item in selected_items]
 
-        # 开始清理并检查队列
-        self.core.action("clean", items_to_clean)
-        self.check_queue(time.time())
+            # 开始清理并检查队列
+            self.core.action("clean", items_to_clean)
+            self.check_queue(time.time())
+
+        except Exception:
+            # 如遇错误, 状态栏显示错误消息, 停止进度条动画, 启用清理按钮
+            self.status_var.set(f"Error starting cleanup: {str(Exception)}")
+            self.clean_btn.config(state="normal")
+            self.progress.stop()
 
     def check_queue(self, start_time: float) -> None:
         """检查队列中的消息"""
@@ -305,47 +312,56 @@ class GUI:
         try:
             while True:
                 try:  # 从队列中获取消息, 若队列为空则退出循环
-                    match (msg := self.core.queue.get_nowait()):
-
-                        case ("found_item", (path, kind, size, modified)):
-                            self.tree.insert("", "end", values=("✓", path, kind,
-                                self.core.format_size(size), modified))
-
-                        case ("scan_done", (total_size, file_count)):
-                            elapsed = time.time() - start_time
-                            self.status_var.set(
-                                f"Scan completed in {elapsed:.2f}s. "
-                                f"Found {file_count} items, Total size: {self.core.format_size(total_size)}")
-                            Core.send_notification(f"🔍 Scan completed in {elapsed:.2f}s",
-                                f"Found {file_count} items, Total size: {self.core.format_size(total_size)}")
-                            # 重置扫描状态和按钮, 停止进度条动画
-                            self.is_scanning = False
-                            self.scan_btn.config(text="🔍 Scan", state="normal")
-                            self.progress.stop()
-                            # 清理按钮仅在有选中项时启用
-                            self.clean_btn.config(state="normal"
-                                if any(self.tree.item(i)["values"][0]=="✓"
-                                for i in self.tree.get_children()) else "disabled")
-                            return
-
-                        case ("clean_progress", (cleaned, total)):
-                            progress = (cleaned / total) * 100
-                            self.progress["value"] = progress
-                            self.status_var.set(f"Cleaning... {int(progress)}%")
-
-                        case ("clean_error", (path, error)):
-                            self.status_var.set(error)
-
-                        case ("clean_done", None):
-                            self.status_var.set("Cleanup completed")
-                            self.progress.stop()
-                            Core.send_notification("✅ Cleanup completed", "Cleanup completed successfully")
-                            self.tree.delete(*self.tree.get_children())
-                            self.clean_btn.config(state="disabled")
-                            return
-
+                    msg_type, data = self.core.queue.get_nowait()
                 except queue.Empty:
                     break
+
+                match msg_type:
+                    case "found_item":  # 在 Treeview 中添加找到的项目
+                        full_path, kind, size, modified = data
+                        self.tree.insert("", "end", values=("✓", full_path, kind,
+                                       self.core.format_size(size), modified))
+
+                    case "scan_done":  # 在状态栏显示扫描完成后的统计信息
+                        total_size, file_count = data
+                        elapsed = time.time() - start_time
+                        self.status_var.set(
+                            f"Scan completed in {elapsed:.2f}s. "
+                            f"Found {file_count} items, Total size: {self.core.format_size(total_size)}")
+                        # 显示通知
+                        Core.send_notification(f"🔍 Scan completed in {elapsed:.2f}s",
+                            f"Found {file_count} items, Total size: {self.core.format_size(total_size)}")
+                        # 重置扫描状态和按钮, 停止进度条动画
+                        self.is_scanning = False
+                        self.scan_btn.config(text="🔍 Scan", state="normal")
+                        self.progress.stop()
+                        # 清理按钮仅在有选中项时启用
+                        self.clean_btn.config(state="normal" if any(
+                            self.tree.item(i)["values"][0]=="✓"
+                            for i in self.tree.get_children()) else "disabled")
+                        return
+
+                    case "clean_progress":  # 更新清理进度
+                        cleaned, total = data
+                        progress = (cleaned / total) * 100
+                        self.progress["value"] = progress
+                        self.status_var.set(f"Cleaning... {int(progress)}%")
+
+                    case "clean_error":  # 在状态栏显示清理错误
+                        path, error = data
+                        self.status_var.set(error)
+
+                    case "clean_done":  # 在状态栏显示清理完成消息, 停止进度条动画
+                        self.status_var.set("Cleanup completed")
+                        self.progress.stop()
+                        # 显示通知
+                        Core.send_notification("✅ Cleanup completed", "Cleanup completed successfully")
+                        # 清空 Treeview 内容
+                        for item in self.tree.get_children():
+                            self.tree.delete(item)
+                        # 禁用清理按钮
+                        self.clean_btn.config(state="disabled")
+                        return
 
         except Exception:
             # 如遇错误, 重置扫描状态和按钮, 停止进度条动画
@@ -424,24 +440,27 @@ class GUI:
     def handle_context_menu(self, action: str) -> None:
         """处理右键菜单"""
 
-        if not (selected := self.tree.selection()): return
+        if not (selected := self.tree.selection()):
+            return
         path = self.tree.item(selected[0])["values"][1]
 
         try:
-            match (OS, action):
-                case ("Darwin", "open"):
-                    subprocess.run(["open", path])
-                case ("Windows", "open"):
-                    os.startfile(path)
-                case (_, "open"):
-                    subprocess.run(["xdg-open", path])
-                case ("Darwin", "reveal"):
-                    subprocess.run(["open", "-R", path])
-                case ("Windows", "reveal"):
-                    subprocess.run(["explorer", "/select,", path])
-                case (_, "reveal"):
-                    subprocess.run(["xdg-open", path])
-                case (_, "copy"):
+            match action:
+                case "open":  # 打开文件
+                    if OS == "Darwin":
+                        subprocess.run(["open", path])
+                    elif OS == "Windows":
+                        os.startfile(path)
+                    else:
+                        subprocess.run(["xdg-open", path])
+                case "reveal":  # 在 Finder 中显示文件
+                    if OS == "Darwin":
+                        subprocess.run(["open", "-R", path])
+                    elif OS == "Windows":
+                        subprocess.run(["explorer", "/select,", path])
+                    else:
+                        subprocess.run(["xdg-open", path])
+                case "copy":  # 复制文件路径
                     self.root.clipboard_clear()
                     self.root.clipboard_append(path)
         except Exception:
@@ -479,60 +498,67 @@ class CLI:
         try:
             while True:
                 try:
-                    match (msg := self.core.queue.get(timeout=None)):
-
-                        case ("found_item", (path, kind, size, modified)):
-                            self.results.append(path)
-                            table.add_row(kind, str(path), self.core.format_size(size), modified)
-
-                        case ("scan_done", (total_size, file_count)):
-                            elapsed = time.time() - start_time
-
-                            # 停止扫描状态动画
-                            self.status.stop()
-
-                            # 有找到垃圾文件时打印结果表格
-                            if self.results:
-                                self.console.print(table)
-
-                            # 打印统计信息
-                            done = Text(f"\nScan completed in {elapsed:.2f}s. ", style="b green")
-                            done.append(f"Found {file_count} items, ", style="b green")
-                            done.append(f"Total size: {self.core.format_size(total_size)}", style="b green")
-                            self.console.print(done)
-
-                            # 显示通知
-                            Core.send_notification(f"🔍 Scan completed in {elapsed:.2f}s",
-                                f"Found {file_count} items, Total size: {self.core.format_size(total_size)}")
-
-                            if self.results:  # 如果找到垃圾文件
-                                if not auto and not Confirm.ask(
-                                    Text("\nDo you want to delete these files? ", style="b red")):
-                                    self.exit()
-
-                                # 显示状态动画, 开始清理
-                                self.status = self.console.status("Cleaning...")
-                                self.status.start()
-                                self.core.action("clean", self.results)
-                            else:
-                                return
-
-                        case ("clean_progress", (cleaned, total)):
-                            progress = (cleaned / total) * 100
-                            self.status.update(f"Cleaning... {int(progress)}%")
-
-                        case ("clean_error", (path, error)):
-                            self.console.print(error, style="red")
-
-                        case ("clean_done", None):  # 清理完成后停止清理状态动画, 打印清理完成消息
-                            self.status.stop()
-                            self.console.print("\nCleanup completed\n", style="b green")
-                            Core.send_notification("✅ Cleanup completed", "Cleanup completed successfully")
-                            return
-                except queue.Empty:
+                    # 从队列中获取消息
+                    msg_type, data = self.core.queue.get(timeout=None)
+                except queue.Empty:  # 如果队列为空, 继续检查线程是否仍在运行
                     if self.core.thread and self.core.thread.is_alive():
                         continue
                     break
+
+                match msg_type:
+                    case "found_item":  # 添加到表格
+                        full_path, kind, size, modified = data
+                        self.results.append(full_path)
+                        table.add_row(kind, str(full_path), self.core.format_size(size), modified)
+
+                    case "scan_done":  # 扫描完成后显示统计信息
+                        total_size, file_count = data
+                        elapsed = time.time() - start_time
+
+                        # 停止扫描状态动画
+                        self.status.stop()
+
+                        # 有找到垃圾文件时打印结果表格
+                        if self.results:
+                            self.console.print(table)
+
+                        # 打印统计信息
+                        done = Text(f"\nScan completed in {elapsed:.2f}s. ", style="b green")
+                        done.append(f"Found {file_count} items, ", style="b green")
+                        done.append(f"Total size: {self.core.format_size(total_size)}", style="b green")
+                        self.console.print(done)
+
+                        # 显示通知
+                        Core.send_notification(f"🔍 Scan completed in {elapsed:.2f}s",
+                            f"Found {file_count} items, Total size: {self.core.format_size(total_size)}")
+
+                        if self.results:  # 如果找到垃圾文件
+                            if not auto:  # 非 --auto 模式下要求确认
+                                ask = Text("\nDo you want to delete these files? ", style="red")
+                                if not Confirm.ask(ask):
+                                    self.exit()
+
+                            # 显示状态动画, 开始清理
+                            self.status = self.console.status("Cleaning...")
+                            self.status.start()
+                            self.core.action("clean", self.results)
+                        else:
+                            return  # 没找到垃圾文件直接退出
+
+                    case "clean_progress":  # 清理状态动画进度更新
+                        cleaned, total = data
+                        progress = (cleaned / total) * 100
+                        self.status.update(f"Cleaning... {int(progress)}%")
+
+                    case "clean_error":  # 打印清理错误消息
+                        path, error = data
+                        self.console.print(error, style="red")
+
+                    case "clean_done":  # 清理完成后停止清理状态动画, 打印清理完成消息
+                        self.status.stop()
+                        self.console.print("\nCleanup completed\n", style="b green")
+                        Core.send_notification("✅ Cleanup completed", "Cleanup completed successfully")
+                        return
 
         except (KeyboardInterrupt, EOFError):
             self.exit()
