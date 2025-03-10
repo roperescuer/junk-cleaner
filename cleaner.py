@@ -10,8 +10,9 @@ from rich.text import Text
 from rich.table import Table
 from rich.prompt import Confirm
 
-APP_TITLE = "🧹 Junk Cleaner V250309"
 OS = platform.system()
+APP_TITLE = f"🧹 Junk Cleaner V250310 on {OS}"
+RUNTIME_VERSION = f"Python {sys.version.split()[0]} / tkinter {tk.TkVersion}"
 DEFAULT_SCAN_PATH = {"Darwin": Path("/Users"), "Windows": Path("C:/")}.get(OS, Path("/home"))
 JUNK_FILES = {
     "names": (".DS_Store", "desktop.ini", "Thumbs.db", ".bash_history", ".zsh_history", "fish_history",
@@ -146,14 +147,14 @@ class GUI:
         self.context_menu = None
 
         if tk.TkVersion < 9.0:
-            messagebox.showerror("Error", f"Requires Tk 9.0+. Your version: {tk.TkVersion}")
+            messagebox.showerror("Error", f"Requires Tk 9.0+. Your version: {RUNTIME_VERSION}")
             sys.exit()
 
         # 创建主窗口
         self.root = tk.Tk()
         self.root.geometry("1152x720")
         self.root.minsize(1024, 640)
-        self.root.title(APP_TITLE)
+        self.root.title(f"{APP_TITLE} - {RUNTIME_VERSION}")
 
         # 路径标签
         ttk.Label(self.root, text="Path to scan:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
@@ -485,14 +486,14 @@ class CLI:
             self.status.start()
             self.core.action("scan", path)
             self.check_queue(time.time(), path, auto)
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
             self.exit()
 
     def check_queue(self, start_time: float, path: Path, auto: bool = False) -> None:
         """检查队列中的消息"""
 
         # 创建结果表格
-        table = Table(title=f"{APP_TITLE} - Scan result of \'{str(path)}\'",
+        table = Table(title=f"{APP_TITLE} - Scan result of {str(path)}",
                       title_style="b i bright_yellow on blue",
                       header_style="b blue", border_style="blue")
         table.add_column("📄 Kind", justify="center", style="red", min_width=6)
@@ -528,10 +529,10 @@ class CLI:
                             self.console.print(table)
 
                         # 打印统计信息
-                        done_text = Text(f"\nScan completed in {elapsed:.2f}s. ", style="b green")
-                        done_text.append(f"Found {file_count} items, ", style="b green")
-                        done_text.append(f"Total size: {self.core.format_size(total_size)}", style="b green")
-                        self.console.print(done_text)
+                        done = Text(f"\nScan completed in {elapsed:.2f}s. ", style="b green")
+                        done.append(f"Found {file_count} items, ", style="b green")
+                        done.append(f"Total size: {self.core.format_size(total_size)}", style="b green")
+                        self.console.print(done)
 
                         # 显示通知
                         Core.send_notification(f"🔍 Scan completed in {elapsed:.2f}s",
@@ -539,8 +540,8 @@ class CLI:
 
                         if self.results:  # 如果找到垃圾文件
                             if not auto:  # 非 --auto 模式下要求确认
-                                ask_text = Text("\nDo you want to delete these files? ", style="red")
-                                if not Confirm.ask(ask_text):
+                                ask = Text("\nDo you want to delete these files? ", style="red")
+                                if not Confirm.ask(ask):
                                     self.exit()
 
                             # 显示状态动画, 开始清理
@@ -560,7 +561,7 @@ class CLI:
                         Core.send_notification("✅ Cleanup completed", "Cleanup completed successfully")
                         return
 
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
             self.exit()
         except Exception:
             self.console.print(f"Error processing scan results: {str(Exception)}", style="red")
@@ -576,7 +577,7 @@ class CLI:
 if __name__ == "__main__":
 
     # 命令行参数
-    parser = argparse.ArgumentParser(description=APP_TITLE)
+    parser = argparse.ArgumentParser(description=f"{APP_TITLE} - {RUNTIME_VERSION}")
     parser.add_argument("--cli", "-c", action="store_true", help="run in CLI mode")
     parser.add_argument("--auto", "-a", action="store_true",
                         help="auto clean without confirmation (only works in CLI mode)")
