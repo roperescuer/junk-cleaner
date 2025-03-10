@@ -11,7 +11,7 @@ from rich.table import Table
 from rich.prompt import Confirm
 
 OS = platform.system()
-APP_TITLE = f"🧹 Junk Cleaner V250310 on {OS}"
+APP_TITLE = f"🧹 Junk Cleaner V250311 on {OS}"
 RUNTIME_VERSION = f"Python {sys.version.split()[0]} / tkinter {tk.TkVersion}"
 DEFAULT_SCAN_PATH = {"Darwin": Path("/Users"), "Windows": Path("C:/")}.get(OS, Path("/home"))
 JUNK_FILES = {
@@ -28,13 +28,12 @@ JUNK_FILES = {
 class Core:
     """核心功能类, 处理文件扫描和清理的逻辑, 并封装有2个独立函数"""
     def __init__(self) -> None:
-
         self.abort_event = threading.Event()
         self.queue = queue.Queue()
         self.thread = None
 
     def action(self, action_type: str, path_or_items: Path | list[Path]) -> None:
-        """统一对外接口, 处理扫描和清理操作"""
+        """启动扫描和清理操作的对外接口"""
 
         self.abort_event.clear()
         target = self._scanner if action_type == "scan" else self._cleaner
@@ -54,10 +53,8 @@ class Core:
         processed_paths = set()  # 用于记录已处理的路径
 
         for root_path in scan_path.rglob("*"):
-            # 检查是否中断
             if self.abort_event.is_set():
                 return
-
             try:
                 # 如果当前路径的任何父目录已被处理, 则跳过
                 if any(str(parent) in processed_paths for parent in root_path.parents):
@@ -89,28 +86,35 @@ class Core:
             except (OSError, PermissionError):
                 continue
 
-        # 只在没有中断的情况下才发送 scan_done 消息
         if not self.abort_event.is_set():
             self.queue.put(("scan_done", (total_size, file_count)))
 
     def _cleaner(self, items: list[Path]) -> None:
         """清理线程的工作函数"""
 
+        total = len(items)                  # 总项目数
+        cleaned = 0                         # 已清理数量
+        target_duration = 0.5               # 目标总清理时间（秒）
+        delay = target_duration / total     # 每个项目的延迟时间
+
         for path in items:
-            if self.abort_event.is_set():  # 检查是否中断
+            if self.abort_event.is_set():
                 break
             try:
                 if path.exists():
                     if path.is_file():
                         path.unlink()
+                        time.sleep(delay)
                     else:
                         shutil.rmtree(path, ignore_errors=True)
+                        time.sleep(delay)
+                cleaned += 1
+                self.queue.put(("clean_progress", (cleaned, total)))
             except (OSError, PermissionError) as e:
-                # 发送清理失败消息
                 self.queue.put(("clean_error", (path, str(e))))
 
-        # 发送清理完成消息
-        self.queue.put(("clean_done", None))
+        if not self.abort_event.is_set():
+            self.queue.put(("clean_done", None))
 
     @staticmethod
     def format_size(size: int) -> str:
@@ -133,7 +137,6 @@ class Core:
 class GUI:
     """GUI界面类"""
     def __init__(self, path: Path) -> None:
-
         self.core = Core()
         self.scan_path = path
         self.is_scanning = False
@@ -169,7 +172,9 @@ class GUI:
 
         # 浏览按钮
         ttk.Button(self.root, text="📂 Browse", padding=5, width=8,
-                   command=self.browse_path).grid(row=0, column=2, padx=5, pady=5)
+                   command=lambda: self.path_var.set(str(Path(p)))
+                   if (p := filedialog.askdirectory()) else None
+        ).grid(row=0, column=2, padx=5, pady=5)
 
         # 扫描按钮
         self.scan_btn = ttk.Button(self.root, text="🔍 Scan", padding=5, width=8, command=self.toggle_scan)
@@ -211,7 +216,9 @@ class GUI:
         self.context_menu.add_command(label="Reveal", command=lambda: self.handle_context_menu("reveal"))
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Copy as Path", command=lambda: self.handle_context_menu("copy"))
-        self.tree.bind("<Button-3>", self.show_context_menu)  # 绑定到 Treeview
+        self.tree.bind("<Button-3>", lambda e: (
+            self.tree.selection_set(self.tree.identify_row(e.y)),
+            self.context_menu.post(e.x_root, e.y_root)) if self.tree.identify_row(e.y) else None)
 
         # 状态栏
         self.status_var = tk.StringVar()
@@ -219,25 +226,18 @@ class GUI:
         status_bar.grid(row=2, column=0, columnspan=6, sticky="ew")
 
         # 进度条
-        self.progress = ttk.Progressbar(self.root, mode="indeterminate", length=350)
+        self.progress = ttk.Progressbar(self.root, length=350)
         self.progress.grid(row=2, column=0, columnspan=6, padx=10, sticky="e")
 
         # 配置网格权重
         self.root.grid_columnconfigure(1, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
 
-        # GUI创建后 100ms 执行首次扫描
-        self.root.after(100, self.toggle_scan)
+        # 自动执行首次扫描
+        self.toggle_scan()
 
         # 运行主循环
         self.root.mainloop()
-
-    def browse_path(self) -> None:
-        """浏览路径对话框"""
-
-        if path_str := filedialog.askdirectory():
-            self.path_var.set(str(path := Path(path_str)))
-            self.scan_path = path
 
     def toggle_scan(self) -> None:
         """开始/停止扫描"""
@@ -254,6 +254,7 @@ class GUI:
             # 更新按钮外观, 显示进度条动画, 更新状态栏, 清空 Treeview
             self.scan_btn.config(text="🛑 Stop")
             self.clean_btn.config(state="disabled")
+            self.progress.config(mode="indeterminate")
             self.progress.start(10)
             self.status_var.set("Scanning...")
             for item in self.tree.get_children():
@@ -261,7 +262,7 @@ class GUI:
 
             # 开始扫描并检查队列
             self.core.action("scan", self.scan_path)
-            self.root.after(100, self.check_queue, time.time())
+            self.check_queue(time.time())
 
         else:  # 停止扫描
             self.is_scanning = False
@@ -284,20 +285,19 @@ class GUI:
                 "Do you want to delete these files?"):
                 return
 
-            # 禁用清理按钮, 更新状态栏显示, 开始进度条动画
+            # 禁用清理按钮, 配置进度条动画
             self.clean_btn.config(state="disabled")
-            self.status_var.set("Cleaning...")
-            self.progress.start(10)
+            self.progress.config(mode="determinate", maximum=100, value=0)
 
             # 将 Treeview 中的字符串路径转换为 Path 对象
             items_to_clean = [Path(self.tree.item(item)["values"][1]) for item in selected_items]
 
             # 开始清理并检查队列
             self.core.action("clean", items_to_clean)
-            self.root.after(100, self.check_queue, time.time())
+            self.check_queue(time.time())
 
         except Exception:
-            # 如果遇到错误, 在状态栏显示错误消息, 停止进度条动画, 并启用清理按钮
+            # 如遇错误, 状态栏显示错误消息, 停止进度条动画, 启用清理按钮
             self.status_var.set(f"Error starting cleanup: {str(Exception)}")
             self.clean_btn.config(state="normal")
             self.progress.stop()
@@ -305,13 +305,13 @@ class GUI:
     def check_queue(self, start_time: float) -> None:
         """检查队列中的消息"""
 
-        # 如果已触发中断, 停止检查队列
+        # 若已触发中断则停止检查队列
         if self.core.abort_event.is_set():
             return
 
         try:
             while True:
-                try:  # 从队列中获取消息, 如果队列为空则退出循环
+                try:  # 从队列中获取消息, 若队列为空则退出循环
                     msg_type, data = self.core.queue.get_nowait()
                 except queue.Empty:
                     break
@@ -341,6 +341,12 @@ class GUI:
                             for i in self.tree.get_children()) else "disabled")
                         return
 
+                    case "clean_progress":  # 更新清理进度
+                        cleaned, total = data
+                        progress = (cleaned / total) * 100
+                        self.progress["value"] = progress
+                        self.status_var.set(f"Cleaning... {int(progress)}%")
+
                     case "clean_error":  # 在状态栏显示清理错误
                         path, error = data
                         self.status_var.set(error)
@@ -358,16 +364,43 @@ class GUI:
                         return
 
         except Exception:
-            # 如果遇到错误, 重置扫描状态和按钮, 停止进度条动画
+            # 如遇错误, 重置扫描状态和按钮, 停止进度条动画
             self.is_scanning = False
             self.status_var.set(f"Error processing results: {str(Exception)}")
             self.scan_btn.config(text="🔍 Scan", state="normal")
             self.clean_btn.config(state="normal")
             self.progress.stop()
 
-        # 如果扫描或清理线程仍在运行,继续检查队列
+        # 如果线程仍在运行则继续检查队列
         if self.core.thread and self.core.thread.is_alive():
-            self.root.after(100, self.check_queue, start_time)
+            self.root.after(10, self.check_queue, start_time)
+
+    def treeview_sort(self, col: str, reverse: bool) -> None:
+        """对表格列进行排序"""
+
+        # 获取待排序项目
+        items = [(k, self.tree.set(k, col)) for k in self.tree.get_children("")]
+
+        # 根据列的类型进行排序
+        if col == "size":  # 按文件大小排序
+            units = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3}
+            items = sorted(items,
+                key=lambda x: float(x[1].split()[0]) * units[x[1].split()[1]], reverse=reverse)
+        else:
+            items = sorted(items, key=lambda x: x[1], reverse=reverse)
+
+        # 重新排列项目
+        for idx, (item, _) in enumerate(items):
+            self.tree.move(item, "", idx)
+
+        # 更新表头排序指示器
+        for header in ["path", "kind", "size", "modified"]:
+            text = self.tree.heading(header)["text"].rstrip(" ↑↓")
+            self.tree.heading(header,
+                text=f"{text} {('↓' if reverse else '↑') if header == col else ''}")
+
+        # 切换下次排序方向
+        self.tree.heading(col, command=lambda: self.treeview_sort(col, not reverse))
 
     def handle_select(self, event: tk.Event) -> None:
         """处理 Treeview 的点击事件"""
@@ -404,46 +437,11 @@ class GUI:
         has_selected = any(self.tree.item(i)["values"][0] == "✓" for i in self.tree.get_children())
         self.clean_btn.config(state="normal" if has_selected else "disabled")
 
-    def treeview_sort(self, col: str, reverse: bool) -> None:
-        """对表格列进行排序"""
-
-        # 获取待排序项目
-        items = [(k, self.tree.set(k, col)) for k in self.tree.get_children("")]
-
-        # 根据列的类型进行排序
-        if col == "size":  # 按文件大小排序
-            units = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3}
-            items = sorted(items,
-                key=lambda x: float(x[1].split()[0]) * units[x[1].split()[1]], reverse=reverse)
-        else:
-            items = sorted(items, key=lambda x: x[1], reverse=reverse)
-
-        # 重新排列项目
-        for idx, (item, _) in enumerate(items):
-            self.tree.move(item, "", idx)
-
-        # 更新表头排序指示器
-        for header in ["path", "kind", "size", "modified"]:
-            text = self.tree.heading(header)["text"].rstrip(" ↑↓")
-            self.tree.heading(header,
-                text=f"{text} {('↓' if reverse else '↑') if header == col else ''}")
-
-        # 切换下次排序方向
-        self.tree.heading(col, command=lambda: self.treeview_sort(col, not reverse))
-
-    def show_context_menu(self, event: tk.Event) -> None:
-        """显示右键菜单"""
-
-        if item := self.tree.identify_row(event.y):
-            self.tree.selection_set(item)
-            self.context_menu.post(event.x_root, event.y_root)
-
     def handle_context_menu(self, action: str) -> None:
-        """处理右键菜单操作"""
+        """处理右键菜单"""
 
         if not (selected := self.tree.selection()):
             return
-
         path = self.tree.item(selected[0])["values"][1]
 
         try:
@@ -455,7 +453,6 @@ class GUI:
                         os.startfile(path)
                     else:
                         subprocess.run(["xdg-open", path])
-
                 case "reveal":  # 在 Finder 中显示文件
                     if OS == "Darwin":
                         subprocess.run(["open", "-R", path])
@@ -463,18 +460,15 @@ class GUI:
                         subprocess.run(["explorer", "/select,", path])
                     else:
                         subprocess.run(["xdg-open", path])
-
                 case "copy":  # 复制文件路径
                     self.root.clipboard_clear()
                     self.root.clipboard_append(path)
-
         except Exception:
             messagebox.showerror("Error", str(Exception))
 
 class CLI:
     """CLI界面类"""
     def __init__(self, path: Path, auto: bool = False) -> None:
-
         self.core = Core()
         self.results = []
         self.console = Console()
@@ -549,7 +543,12 @@ class CLI:
                             self.status.start()
                             self.core.action("clean", self.results)
                         else:
-                            return  # 如果没有找到垃圾文件直接退出
+                            return  # 没找到垃圾文件直接退出
+
+                    case "clean_progress":  # 清理状态动画进度更新
+                        cleaned, total = data
+                        progress = (cleaned / total) * 100
+                        self.status.update(f"Cleaning... {int(progress)}%")
 
                     case "clean_error":  # 打印清理错误消息
                         path, error = data
@@ -567,7 +566,7 @@ class CLI:
             self.console.print(f"Error processing scan results: {str(Exception)}", style="red")
 
     def exit(self) -> None:
-        """设置中断标志, 停止状态动画, 退出程序"""
+        """体面地说再见"""
 
         self.core.abort_event.set()
         self.status.stop()
