@@ -2,8 +2,8 @@
 
 # PyInstaller build script for macOS arm64
 
-# Make sure PyInstaller is installed
-pip3 install pyinstaller
+# Make sure latest version of PyInstaller is installed
+pip3 install -U pyinstaller
 
 # Delete previous build
 rm *.dmg

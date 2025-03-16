@@ -710,6 +710,8 @@ class GUI:
                     # 遇到清理错误, 在状态栏显示错误消息
                     case ("clean_error", (path, error)):
                         self.status_var.set(f"{now_time()}❌ {error}")
+                        # 同时在控制台输出错误信息
+                        print(f"\033[31m{error}\033[0m")
 
                     # 清理完成
                     case ("clean_done", (cleaned_size, success_count, total)):
