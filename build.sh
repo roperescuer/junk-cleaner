@@ -9,9 +9,9 @@ pip3 install pyinstaller
 rm *.dmg
 
 # Build executables
-pyinstaller cleaner.py      --clean --windowed --target-arch arm64
-pyinstaller imac_color.py   --clean --windowed --target-arch arm64
-pyinstaller doge.py         --clean --onefile --target-arch arm64
+pyinstaller cleaner.py      --clean --optimize 2 --windowed --target-arch arm64
+pyinstaller imac_color.py   --clean --optimize 2 --windowed --target-arch arm64
+pyinstaller doge.py         --clean --optimize 2 --onefile  --target-arch arm64
 
 # Cleanup the temporary build files
 rm *.spec

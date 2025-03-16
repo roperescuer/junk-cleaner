@@ -28,10 +28,12 @@ try:
 except ImportError:
     print("Installing required package...\n")
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "rich"])
+        subprocess.run([sys.executable, "-m", "pip", "install", "rich"], check=True)
     except subprocess.CalledProcessError:
         try:
-            subprocess.check_call([sys.executable, "-m", "pip3", "install", "rich"])
+            subprocess.run(
+                [sys.executable, "-m", "pip3", "install", "rich"], check=True
+            )
         except subprocess.CalledProcessError as e:
             print(f"Failed to install requirements:\n{e}")
             sys.exit()
