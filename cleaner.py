@@ -32,7 +32,16 @@ except ImportError:
         # 所以用 python/python3 -m pip install 的形式
         # 避免直接调用 pip/pip3 导致命令名错误
         subprocess.run(
-            [sys.executable, "-m", "pip", "install", "rich", "--break-system-packages"],
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "rich",
+                "-q",
+                "-U",
+                "--break-system-packages",
+            ],
             check=True,
         )
     except Exception:
@@ -52,11 +61,11 @@ from rich.text import Text
 
 # 定义程序标题和版本, 获取运行环境版本信息
 OS = platform.system()
-APP_TITLE = f"🧹 Junk Cleaner V250316 on {OS}"
+APP_TITLE = f"🧹 Junk Cleaner V250318 on {OS}"
 RUNTIME_VERSION = f"Python {sys.version.split()[0]} / tkinter {tk.TkVersion}"
 
 # 根据不同系统, 指定默认扫描路径
-DEFAULT_SCAN_PATH = {"Darwin": Path("/Users"), "Windows": Path("C:/")}.get(
+DEFAULT_SCAN_PATH = {"Darwin": Path("/Users"), "Windows": Path("C:/Users")}.get(
     OS, Path("/home")
 )
 
@@ -120,6 +129,7 @@ JUNK_FILES = {
         "$RECYCLE.BIN",
         "System Volume Information",
         "Windows.old",
+        "PerfLogs",
         "xl_sdks_kvstorage",
         "网易云音乐",
         re.compile(r"Cache", re.IGNORECASE),
@@ -144,52 +154,8 @@ SYSTEM_TEMP_DIRS = {
 }.get(OS, [])
 
 
-def now_time() -> str:
-    """返回格式化的当前时间字符串
-
-    Returns:
-        str: 格式为 '[HH:MM:SS] ' 的时间字符串
-    """
-    return f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
-
-
-def send_notification(title: str, message: str) -> None:
-    """发送系统通知
-
-    目前仅支持 macOS 平台
-
-    Args:
-        title (str): 通知标题
-        message (str): 通知内容
-    """
-    if OS == "Darwin":
-        subprocess.run(
-            [
-                "osascript",
-                "-e",
-                f'display notification "{message}" with title "{title}"',
-            ]
-        )
-
-
 class Core:
-    """核心功能类, 处理扫描和清理的逻辑
-
-    Messages sent to queue:
-        扫描消息:
-            ("found_item", (path: Path, kind: str, size: str, modified: str)):
-                发现垃圾文件/文件夹时发送
-            ("scan_done", (total_size: str, file_count: int)):
-                扫描完成时发送
-
-        清理消息:
-            ("clean_progress", (cleaned: int, total: int)):
-                清理进度更新时发送
-            ("clean_error", (path: Path, error: str)):
-                清理出错时发送
-            ("clean_done", (cleaned_size: str, success_count: int, total: int)):
-                清理完成时发送
-    """
+    """核心功能类, 处理扫描和清理的逻辑"""
 
     def __init__(self) -> None:
         """初始化核心功能类
@@ -398,6 +364,15 @@ class Core:
             size /= 1024
         return f"{size:.1f} {unit}"
 
+    @staticmethod
+    def now_time() -> str:
+        """返回格式化的当前时间字符串
+
+        Returns:
+            str: 格式为 '[HH:MM:SS] ' 的时间字符串
+        """
+        return f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
+
 
 class GUI:
     """GUI界面类, 基于 tkinter 创建图形用户界面"""
@@ -425,27 +400,21 @@ class GUI:
         self.progress = None  # 进度条
         self.context_menu = None  # 右键菜单
 
-        # 判断 tkinter 版本 (低版本 tkinter 右键菜单不工作)
+        # 判断 tkinter 版本 (已知低于 9.0 在 macOS 上右键菜单失效)
         if tk.TkVersion < 9.0:
-            messagebox.showerror(
-                "Error", f"Requires Tk 9.0+. Your version: {RUNTIME_VERSION}"
+            messagebox.showwarning(
+                "Warning",
+                f"Your tkinter version too low, some functions may not work properly.\n"
+                f"It is strongly recommended to upgrade the tkinter to 9.0 or higher.",
             )
-            sys.exit()
-
-        # 设置环境变量, 禁用控制台日志输出
-        os.environ["PYTHONUNBUFFERED"] = "1"
-        os.environ["TK_SILENCE_DEPRECATION"] = "1"
-        os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
 
         # GUI 模式下在控制台显示提示信息
         print(
             f"""\033[32m
-            Notes:
-
-             - You can also run the program in CLI mode by:
-               $ python {os.path.basename(__file__)} --cli
-
+            Tips:
              - If cleanup fails, try running with root.
+             - Program also can be run in command line:
+               $ ./{os.path.basename(__file__)} -c
             \033[0m"""
         )
 
@@ -550,14 +519,14 @@ class GUI:
         # 右键菜单
         self.context_menu = tk.Menu(self.root, tearoff=0)
         self.context_menu.add_command(
-            label="Open", command=lambda: self.handle_menu("open")
+            label="🔍 Open", command=lambda: self.handle_menu("open")
         )
         self.context_menu.add_command(
-            label="Reveal", command=lambda: self.handle_menu("reveal")
+            label="📂 Reveal", command=lambda: self.handle_menu("reveal")
         )
         self.context_menu.add_separator()
         self.context_menu.add_command(
-            label="Copy as Path", command=lambda: self.handle_menu("copy")
+            label="📋 Copy as Path", command=lambda: self.handle_menu("copy")
         )
         self.tree.bind(
             "<Button-3>",
@@ -620,7 +589,7 @@ class GUI:
             self.clean_btn.config(state="disabled")
             self.progress.config(mode="indeterminate")
             self.progress.start(10)
-            self.status_var.set(f"{now_time()}🔍 Scanning...")
+            self.status_var.set(f"{Core.now_time()}🔍 Scanning...")
             self.tree.delete(*self.tree.get_children())
 
             # 清空现有的搜索结果
@@ -632,7 +601,7 @@ class GUI:
 
         else:  # 停止扫描
             self.core.abort_event.set()
-            self.status_var.set(f"{now_time()}⚠️ Scan cancelled")
+            self.status_var.set(f"{Core.now_time()}⚠️ Scan cancelled")
             self.reset_scanning_state()
 
     def clean(self) -> None:
@@ -689,15 +658,15 @@ class GUI:
                     # 扫描完成
                     case ("scan_done", (total_size, file_count)):
                         elapsed = time.time() - start_time
+                        self.reset_scanning_state()
                         self.status_var.set(
-                            f"{now_time()}🔍 Scan completed in {elapsed:.2f}s. "
+                            f"{Core.now_time()}🔍 Scan completed in {elapsed:.2f}s. "
                             f"Found {file_count} items, total size: {total_size}"
                         )
-                        send_notification(
+                        self.send_notification(
                             f"🔍 Scan completed in {elapsed:.2f}s",
                             f"Found {file_count} items, total size: {total_size}",
                         )
-                        self.reset_scanning_state()
                         return
 
                     # 更新清理进度
@@ -705,12 +674,12 @@ class GUI:
                         progress = (cleaned / total) * 100
                         self.progress["value"] = progress
                         self.status_var.set(
-                            f"{now_time()}🧹 Cleaning... {int(progress)}%"
+                            f"{Core.now_time()}🧹 Cleaning... {int(progress)}%"
                         )
 
                     # 遇到清理错误, 在状态栏显示错误消息
                     case ("clean_error", (path, error)):
-                        self.status_var.set(f"{now_time()}❌ {error}")
+                        self.status_var.set(f"{Core.now_time()}❌ {error}")
                         # 同时在控制台输出错误信息
                         print(f"\033[31m{error}\033[0m")
 
@@ -718,15 +687,10 @@ class GUI:
                     case ("clean_done", (cleaned_size, success_count, total)):
                         self.status_var.set(
                             (
-                                f"{now_time()}✅ Cleanup completed. "
+                                f"{Core.now_time()}✅ Cleanup completed. "
                                 f"Success: {success_count}, Failed: {total-success_count}. "
                                 f"Freed disk space: {cleaned_size}"
                             )
-                        )
-                        self.progress.stop()
-                        send_notification(
-                            "✅ Cleanup completed",
-                            f"Successfully freed {cleaned_size} of disk space",
                         )
                         # 从 Treeview 中删除被选中的项目
                         for item in [
@@ -735,6 +699,11 @@ class GUI:
                             if self.tree.item(item)["values"][0] == "✓"
                         ]:
                             self.tree.delete(item)
+                        self.progress.stop()
+                        self.send_notification(
+                            "✅ Cleanup completed",
+                            f"Successfully freed {cleaned_size} of disk space",
+                        )
                         return
 
         except queue.Empty:
@@ -743,8 +712,10 @@ class GUI:
                 self.root.after(10, self.check_queue, start_time)
 
         except Exception as e:
-            self.status_var.set(f"{now_time()}❌ Error processing results: {str(e)}")
             self.reset_scanning_state()
+            self.status_var.set(
+                f"{Core.now_time()}❌ Error processing results: {str(e)}"
+            )
 
     def reset_scanning_state(self) -> None:
         """重置扫描状态
@@ -937,6 +908,33 @@ class GUI:
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    @staticmethod
+    def send_notification(title: str, message: str) -> None:
+        """发送系统通知
+
+        支持 macOS、Windows 和 Linux 平台
+
+        Args:
+            title (str): 通知标题
+            message (str): 通知内容
+        """
+        match OS:
+            case "Darwin":
+                subprocess.run(
+                    [
+                        "osascript",
+                        "-e",
+                        f'display notification "{message}" with title "{title}"',
+                    ]
+                )
+            case "Windows":
+                messagebox.showinfo(title, message)
+            case "Linux":
+                try:
+                    subprocess.run(["notify-send", title, message])
+                except FileNotFoundError:
+                    pass
+
 
 class CLI:
     """CLI界面类, 使用 rich 创建命令行界面"""
@@ -973,7 +971,7 @@ class CLI:
             title (str, optional): 面板标题, 默认为空字符串
             color (str, optional): 文字颜色, 默认为 "green"
         """
-        text = Text(f"\n{now_time()}", style="yellow").append(message, style=color)
+        text = Text(f"\n{Core.now_time()}", style="yellow").append(message, style=color)
         self.console.print(Panel(text, title=title, border_style="b blue"))
 
     def check_queue(self, start_time: float, path: Path, auto: bool = False) -> None:
@@ -1017,12 +1015,8 @@ class CLI:
 
                         # 如果找到垃圾文件/文件夹
                         if self.results:
-                            # 打印表格, 发送通知
+                            # 打印表格
                             self.console.print(table)
-                            send_notification(
-                                f"🔍 Scan completed in {elapsed:.2f}s",
-                                f"Found {file_count} items, total size: {total_size}",
-                            )
                             # 构建统计信息
                             message = (
                                 f"Scan completed in {elapsed:.2f}s. Found {file_count} items, "
@@ -1060,9 +1054,6 @@ class CLI:
                                 f"Scan completed in {elapsed:.2f}s. No junk files found.",
                                 "Scan completed",
                             )
-                            send_notification(
-                                "🔍 Scan completed", "No junk files found"
-                            )
                             return
 
                     # 更新清理状态动画
@@ -1086,10 +1077,6 @@ class CLI:
                             f"\n\n{' '*11}Note: If cleanup fails, try running with root."
                         )
                         self.show_panel(message, "Cleanup completed")
-                        send_notification(
-                            "✅ Cleanup completed",
-                            f"Successfully freed {cleaned_size} of disk space",
-                        )
                         return
 
         except queue.Empty:  # 队列为空且线程仍在运行, 继续检查队列
