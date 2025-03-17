@@ -114,9 +114,9 @@ A: Usually, the failure of cleaning is caused by a file permission problem. Plea
 
 ## 📦 Releases Notes / 发行说明
 
-Packaging Python programs and the running environment together through [PyInstaller](https://pyinstaller.org/en/stable/) can reduce the difficulty of distribution and deployment.
+Packaging Python programs and the running environment together through [Nuitka](https://nuitka.net) or [PyInstaller](https://pyinstaller.org/en/stable/) can reduce the difficulty of distribution and deployment.
 
-通过 [PyInstaller](https://pyinstaller.org/en/stable/) 把 Python 程序和运行环境一并进行打包，可以降低分发和部署的难度。
+通过 [Nuitka](https://nuitka.net) 或 [PyInstaller](https://pyinstaller.org/en/stable/) 把 Python 程序和运行环境一并进行打包，可以降低分发和部署的难度。
 
 Currently, only the [macOS arm64 version](https://github.com/roperescuer/junk-cleaner/releases) is available. For other platforms, please download the source code and install the Python environment and dependency package by yourself.
 
