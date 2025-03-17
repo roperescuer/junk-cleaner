@@ -17,11 +17,12 @@ read -p "Input your choose (1-3): " choice
 ICON="icon.icns"
 DATE=$(date +"%y%m%d")
 VENV_DIR=".venv"
+PIP="$(which pip3 || which pip)"
 export PIP_DISABLE_PIP_VERSION_CHECK=1
 
 build_nuitka() {
     echo -e "\033[32mBuilding executables with Nuitka...\033[0m"
-    pip install -q -U nuitka rich
+    $PIP install -q -U nuitka rich
 
     # Set GUI App parameters
     GUI=(
@@ -32,7 +33,7 @@ build_nuitka() {
         --macos-app-version="${DATE}"
         --remove-output
         --quiet
-        --nofollow-import-to=bz2,codecs,csv,ctypes,crypto,hashlib,ssl,socket,lzma,math,contextvars,pickle,pyexpat,zlib
+        --nofollow-import-to=numpy,bz2,codecs,csv,ctypes,crypto,hashlib,ssl,socket,lzma,math,contextvars,pickle,pyexpat,zlib
         # 'decimal,random' are not included in the list above because they are used by tkinter
     )
 
@@ -42,7 +43,7 @@ build_nuitka() {
         --onefile
         --remove-output
         --quiet
-        --nofollow-import-to=bz2,codecs,csv,ctypes,crypto,hashlib,ssl,socket,lzma,math,contextvars,pickle,pyexpat,zlib,decimal,datetime
+        --nofollow-import-to=numpy,bz2,codecs,csv,ctypes,crypto,hashlib,ssl,socket,lzma,math,contextvars,pickle,pyexpat,zlib,decimal,datetime
     )
 
     # Build executables
@@ -72,7 +73,7 @@ build_nuitka() {
 
 build_pyinstaller() {
     echo -e "\033[32mBuilding executables with PyInstaller, Please wait...\033[0m"
-    pip install -q -U pyinstaller rich
+    $PIP install -q -U pyinstaller rich
 
     ARGS=(
         --log-level WARN

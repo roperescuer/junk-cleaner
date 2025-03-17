@@ -26,17 +26,18 @@ try:
 
     install()
 except ImportError:
-    print("Installing required package...\n")
+    print("\nInstalling required package: rich...\n")
     try:
-        subprocess.run([sys.executable, "-m", "pip", "install", "rich"], check=True)
-    except subprocess.CalledProcessError:
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "pip3", "install", "rich"], check=True
-            )
-        except subprocess.CalledProcessError as e:
-            print(f"Failed to install requirements:\n{e}")
-            sys.exit()
+        # macOS 中 python/python3 以及 pip/pip3 命令混用
+        # 所以用 python/python3 -m pip install 的形式
+        # 避免直接调用 pip/pip3 导致命令名错误
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "rich", "--break-system-packages"],
+            check=True,
+        )
+    except Exception:
+        print("\nInstall failed, please install it manually.\n")
+        sys.exit()
 
 # GUI 界面依赖 (tkinter 内置库版本需高于 9.0)
 import tkinter as tk
