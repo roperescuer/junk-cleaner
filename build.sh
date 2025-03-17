@@ -7,7 +7,7 @@ cat << "EOF"
 
 Choose a build option:
 
-1. Nuitka
+1. Nuitka (Recommend)
 2. PyInstaller
 3. Both
 
@@ -18,6 +18,7 @@ ICON="icon.icns"
 DATE=$(date +"%y%m%d")
 VENV_DIR=".venv"
 PIP="$(which pip3 || which pip)"
+PYTHON="$(which python3 || which python)"
 export PIP_DISABLE_PIP_VERSION_CHECK=1
 
 build_nuitka() {
@@ -75,6 +76,7 @@ build_pyinstaller() {
     echo -e "\033[32mBuilding executables with PyInstaller, Please wait...\033[0m"
     $PIP install -q -U pyinstaller rich
 
+    # Set universal parameters
     ARGS=(
         --log-level WARN
         --clean
@@ -108,7 +110,7 @@ build_pyinstaller() {
 
 setup_venv() {
     echo -e "\033[32mSetting up Python virtual environment...\033[0m"
-    python3 -m venv $VENV_DIR
+    $PYTHON -m venv $VENV_DIR
     source $VENV_DIR/bin/activate
 }
 
@@ -142,4 +144,9 @@ case $choice in
 esac
 
 cleanup_venv
+
+if [ "$choice" -eq 3 ]; then
+    open .
+fi
+
 echo -e "\033[32mBuild completed!\033[0m"
