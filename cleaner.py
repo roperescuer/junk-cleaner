@@ -61,7 +61,7 @@ from rich.text import Text
 
 # 定义程序标题和版本, 获取运行环境版本信息
 OS = platform.system()
-APP_TITLE = f"🧹 Junk Cleaner V250323 on {OS}"
+APP_TITLE = f"🧹 Junk Cleaner V250404 on {OS}"
 RUNTIME_VERSION = f"Python {sys.version.split()[0]} / tkinter {tk.TkVersion}"
 
 # 根据不同系统, 指定默认扫描路径
@@ -422,7 +422,7 @@ class GUI:
         print(
             f"""\033[32m
             Tips:
-             - If cleanup fails, try running with root.
+             - If cleanup fails, try re-running with root.
              - Program also can be run in command line:
                $ ./{os.path.basename(__file__)} -c
             \033[0m"""
@@ -958,6 +958,7 @@ class CLI:
         """
         self.core = Core()
         self.results = []
+        self.error_messages = []
         self.console = Console(highlight=True)
         self.status = None
 
@@ -1075,20 +1076,25 @@ class CLI:
                             f"[b green]Cleaning... {int((cleaned / total) * 100)}%[/]"
                         )
 
-                    # 遇到清理错误, 打印错误消息 (只显示非权限错误)
+                    # 遇到清理错误, 暂存错误消息, 清理完成后一并打印
                     case ("clean_error", (path, error)):
-                        if not "Permission denied" in str(error):
-                            self.show_panel(str(error), "Error", "red")
+                        self.error_messages.append(str(error))
 
                     # 清理完成后停止清理状态动画, 打印清理完成消息
                     case ("clean_done", (cleaned_size, success_count, total)):
                         self.status.stop()
                         message = (
-                            f"Cleanup completed. "
-                            f"Success: {success_count}, Failed: {total-success_count}. "
-                            f"Freed disk space: {cleaned_size}"
-                            f"\n\n{' '*11}Note: If cleanup fails, try running with root."
+                            f"Successfully cleaned {success_count} items, "
+                            f"freed disk space: {cleaned_size}"
                         )
+                        if self.error_messages:
+                            message += (
+                                f"\n\n{' '*11}"
+                                f"The following {total-success_count} items failed to be cleared, "
+                                f"try re-running with root. \n"
+                            )
+                            for error in self.error_messages:
+                                message += f"\n{' '*11} • {error}"
                         self.show_panel(message, "Cleanup completed")
                         return
 
